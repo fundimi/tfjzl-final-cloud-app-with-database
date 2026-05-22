@@ -1,15 +1,19 @@
-from django.shortcuts import render
-from django.http import HttpResponseRedirect
+#from django.shortcuts import render
+#from django.http import HttpResponseRedirect
+
 # <HINT> Import any new Models here
-from .models import Course, Enrollment
+from .models import Course, Enrollment, Question, Choice, Submission
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 from django.views import generic
 from django.contrib.auth import login, logout, authenticate
+from django.http import HttpResponseRedirect
 import logging
+
 # Get an instance of a logger
 logger = logging.getLogger(__name__)
+
 # Create your views here.
 
 
@@ -105,25 +109,78 @@ def enroll(request, course_id):
 
 # <HINT> Create a submit view to create an exam submission record for a course enrollment,
 # you may implement it based on following logic:
-         # Get user and course object, then get the associated enrollment object created when the user enrolled the course
-         # Create a submission object referring to the enrollment
-         # Collect the selected choices from exam form
-         # Add each selected choice object to the submission object
-         # Redirect to show_exam_result with the submission id
-#def submit(request, course_id):
-
-
+# Get user and course object, then get the associated enrollment object created when the user enrolled the course         # Create a submission object referring to the enrollment
+# Collect the selected choices from exam form
 # An example method to collect the selected choices from the exam form from the request object
 def extract_answers(request):
-   submitted_anwsers = []
-   for key in request.POST:
-       if key.startswith('choice'):
-           value = request.POST[key]
-           choice_id = int(value)
-           submitted_anwsers.append(choice_id)
-   return submitted_anwsers
+    """
+    Extrai do formulário os IDs das alternativas escolhidas pelo aluno.
 
+    Os checkboxes do template têm nomes como:
+    choice_1, choice_2, choice_3...
 
+    O valor de cada checkbox é o ID da Choice.
+    """
+    selected_choices = []
+
+    for key, value in request.POST.items():
+        if key.startswith("choice_"):
+            selected_choices.append(int(value))
+
+    return selected_choices
+
+# Add each selected choice object to the submission object
+# Redirect to show_exam_result with the submission id
+def show_exam_result(request, course_id, submission_id):
+    """
+    Mostra o resultado da prova e calcula a pontuação final.
+    """
+    context = {}
+
+    course = get_object_or_404(Course, pk=course_id)
+    submission = Submission.objects.get(id=submission_id)
+    choices = submission.choices.all()
+
+    total_score = 0
+    questions = course.question_set.all()
+
+    for question in questions:
+        correct_choices = question.choice_set.filter(is_correct=True)
+        selected_choices = choices.filter(question=question)
+
+        if set(correct_choices) == set(selected_choices):
+            total_score += question.grade
+
+    context["course"] = course
+    context["grade"] = total_score
+    context["choices"] = choices
+
+    return render(request, "onlinecourse/exam_result_bootstrap.html", context)
+#def submit(request, course_id):
+
+def submit(request, course_id):
+    """
+    Recebe a submissão da prova, salva as alternativas escolhidas
+    e redireciona o aluno para a página de resultado.
+    """
+    course = get_object_or_404(Course, pk=course_id)
+    user = request.user
+
+    enrollment = Enrollment.objects.get(user=user, course=course)
+
+    submission = Submission.objects.create(enrollment=enrollment)
+
+    selected_choice_ids = extract_answers(request)
+    selected_choices = Choice.objects.filter(id__in=selected_choice_ids)
+
+    submission.choices.set(selected_choices)
+
+    return HttpResponseRedirect(
+        reverse(
+            viewname="onlinecourse:exam_result",
+            args=(course_id, submission.id),
+        )
+    )
 # <HINT> Create an exam result view to check if learner passed exam and show their question results and result for each question,
 # you may implement it based on the following logic:
         # Get course and submission based on their ids

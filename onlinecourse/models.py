@@ -1,5 +1,6 @@
 import sys
 from django.utils.timezone import now
+
 try:
     from django.db import models
 except Exception:
@@ -101,3 +102,54 @@ class Enrollment(models.Model):
 #class Submission(models.Model):
 #    enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE)
 #    choices = models.ManyToManyField(Choice)
+
+class Question(models.Model):
+    # Cada pergunta pertence a um curso.
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+
+    # Texto da pergunta.
+    content = models.CharField(max_length=200)
+
+    # Pontuação da pergunta.
+    grade = models.IntegerField(default=50)
+
+    def __str__(self):
+        return "Question: " + self.content
+
+    # Verifica se o aluno selecionou todas as respostas corretas da pergunta.
+    def is_get_score(self, selected_ids):
+        all_answers = self.choice_set.filter(is_correct=True).count()
+        selected_correct = self.choice_set.filter(
+            is_correct=True,
+            id__in=selected_ids
+        ).count()
+
+        if all_answers == selected_correct:
+            return True
+
+        return False
+
+
+class Choice(models.Model):
+    # Cada alternativa pertence a uma pergunta.
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+
+    # Texto da alternativa.
+    content = models.CharField(max_length=200)
+
+    # Indica se essa alternativa é correta ou não.
+    is_correct = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.content
+
+
+class Submission(models.Model):
+    # Cada submissão pertence a uma matrícula/enrollment.
+    enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE)
+
+    # Uma submissão pode conter várias alternativas escolhidas.
+    choices = models.ManyToManyField(Choice)
+
+    def __str__(self):
+        return f"Submission {self.id} - {self.enrollment.user.username}"
